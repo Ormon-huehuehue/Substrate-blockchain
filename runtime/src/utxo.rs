@@ -41,11 +41,21 @@ pub struct Transaction{
 // this macro is used to designate what gets stored on the blockchain state
 decl_storage! {
 	trait Store for Module<T: Trait> as Utxo {
-		UtxoStore : map H256 => Option<TransactionOutput>;
+  		// All valid unspent transaction outputs are stored in this map
+		UtxoStore build(|config : &GenesisConfig| {
+			config.genesis_utxos
+				.iter()
+				.cloned()
+				.map(|u| (BlakeTwo256::hash_of(&u), u))
+				.collect::<Vec<_>>()
+		}): map hasher(identity) H256 => Option<TransactionOutput>;
+
+		//total reward value to be redistributed among authorities
+		pub RewardTotal get(reward_total) : Value;
 	}
 
 	add_extra_genesis{
-		config(genesis_utxos) : Vec<TransactionOutput>
+		config(genesis_utxos) : Vec<TransactionOutput>;
 	}
 }
 
@@ -54,12 +64,37 @@ decl_module! {
 	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
 		fn deposit_event() = default;
 
+		pub fn spend(_origin, transaction : Transaction) -> DispatchResult{
+			// 1. TODO :  Check that the transaction is valid
+
+			// 2. Write to storage
+
+			// 3. Emit success event
+
+			Ok(())
+		}
+
 	}
 }
 
 decl_event! {
 	pub enum Event {
 
+	}
+}
+
+impl <T:Trait> Module<T>{
+	fn update_storage(transaction : &Transaction) -> DispatchResult{
+		// 1. Remove input UTXO from the UtxoStore
+		for input in &transaction.inputs{
+			<UtxoStore>::remove(input.outpoint); 
+		}
+		// 2. Create and store new UTXOs int he UtxoStore
+		for output in &transaction.outputs{
+			let hash = BlakeTwo256::hash_of(&output);
+			<UtxoStore>::insert(hash, output);
+		}
+		Ok(())
 	}
 }
 
@@ -105,6 +140,11 @@ mod tests {
 		type AccountData = ();
 		type OnNewAccount = ();
 		type OnKilledAccount = ();
+		type BaseCallFilter = ();
+	 	type DbWeight = ();
+		type BlockExecutionWeight = ();
+		type ExtrinsicBaseWeight = ();
+		type MaximumExtrinsicWeight = ();
 	}
 	impl Trait for Test {
 		type Event = ();
